@@ -22,7 +22,40 @@ import ProxyCloud
 import socket
 import S5Crypto
 
-
+# ==============================
+# FUNCIÓN PARA FORMATEAR TAMAÑOS
+# ==============================
+def format_file_size(size_bytes):
+    """Formatea bytes a KB, MB o GB automáticamente sin decimales .0 innecesarios"""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    
+    val = size_bytes / 1024.0
+    if val < 1024:
+        formatted = f"{val:.1f}"
+        if formatted.endswith('.0'):
+            formatted = formatted[:-2]
+        return f"{formatted} KB"
+    
+    val /= 1024.0
+    if val < 1024:
+        formatted = f"{val:.1f}"
+        if formatted.endswith('.0'):
+            formatted = formatted[:-2]
+        return f"{formatted} MB"
+    
+    val /= 1024.0
+    if val < 1024:
+        formatted = f"{val:.1f}"
+        if formatted.endswith('.0'):
+            formatted = formatted[:-2]
+        return f"{formatted} GB"
+    
+    val /= 1024.0
+    formatted = f"{val:.1f}"
+    if formatted.endswith('.0'):
+        formatted = formatted[:-2]
+    return f"{formatted} TB"
 
 def downloadFile(downloader,filename,currentBits,totalBits,speed,time,args):
     try:
@@ -139,10 +172,20 @@ def processUploadFiles(filename,filesize,files,update,bot,message,thread=None,jd
 def processFile(update,bot,message,file,thread=None,jdb=None):
     file_size = get_file_size(file)
     getUser = jdb.get_user(update.message.sender.username)
-    max_file_size = 1024 * 1024 * getUser['zips']
+    
+    # 📌 Obtener el límite del usuario (zips en MB, puede ser float)
+    user_limit_mb = float(getUser['zips'])
+    max_file_size = int(1024 * 1024 * user_limit_mb)
+    
+    # 📌 Si el límite es menor a 1MB, forzar 1MB mínimo para evitar problemas
+    if max_file_size < (1 * 1024 * 1024):
+        max_file_size = 1 * 1024 * 1024
+    
     file_upload_count = 0
     client = None
     findex = 0
+    
+    # 📌 COMPRIMIR SIEMPRE que el archivo supere el límite del usuario
     if file_size > max_file_size:
         compresingInfo = infos.createCompresing(file,file_size,max_file_size)
         bot.editMessageText(message,compresingInfo)
@@ -156,10 +199,12 @@ def processFile(update,bot,message,file,thread=None,jdb=None):
         try:
             os.unlink(file)
         except:pass
-        file_upload_count = len(zipfile.files)
+        file_upload_count = len(mult_file.files)
     else:
+        # ✅ Subida directa sin comprimir
         client = processUploadFiles(file,file_size,[file],update,bot,message,jdb=jdb)
         file_upload_count = 1
+    
     bot.editMessageText(message,'🤜Preparando Archivo📄...')
     evidname = ''
     files = []
@@ -324,19 +369,41 @@ def onmessage(update,bot:ObigramClient):
                 bot.sendMessage(update.message.chat.id,statInfo)
                 return
                 
+        # 📌 COMANDO /zips MODIFICADO PARA ACEPTAR DECIMALES
         if '/zips' in msgText:
             getUser = user_info
             if getUser:
                 try:
-                   size = int(str(msgText).split(' ')[1])
-                   getUser['zips'] = size
-                   jdb.save_data_user(username,getUser)
-                   jdb.save()
-                   msg = '😃Genial los zips seran de '+ sizeof_fmt(size*1024*1024)+' las partes👍'
-                   bot.sendMessage(update.message.chat.id,msg)
+                    # 📌 Permitir decimales con punto
+                    size_str = str(msgText).split(' ')[1]
+                    size = float(size_str)
+                    
+                    # 📌 Validaciones
+                    if size < 0.1:
+                        bot.sendMessage(update.message.chat.id, '❌ El límite mínimo es 0.1 MB')
+                        return
+                    if size > 1024:
+                        bot.sendMessage(update.message.chat.id, '❌ El límite máximo es 1024 MB (1 GB)')
+                        return
+                    
+                    # 📌 Guardar como float (o entero si es exacto)
+                    if size.is_integer():
+                        getUser['zips'] = int(size)
+                    else:
+                        getUser['zips'] = size  # Guardar como float
+                    
+                    jdb.save_data_user(username, getUser)
+                    jdb.save()
+                    
+                    # 📌 Mostrar mensaje con el tamaño formateado
+                    size_bytes = int(size * 1024 * 1024)
+                    msg = f'😃 Genial, los zips serán de {format_file_size(size_bytes)} las partes 👍'
+                    bot.sendMessage(update.message.chat.id, msg)
+                except ValueError:
+                    bot.sendMessage(update.message.chat.id, '❌ Error: Debes enviar un número (ej: /zips 0.9 o /zips 2)')
                 except:
-                   bot.sendMessage(update.message.chat.id,'❌Error en el comando /zips size❌')
-                return
+                    bot.sendMessage(update.message.chat.id, '❌ Error en el comando /zips size')
+            return
                 
         if '/account' in msgText:
             try:
