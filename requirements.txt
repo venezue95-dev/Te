@@ -14,3 +14,5 @@ tenacity
 pytz
 pillow
 beautifulsoup4
+pytgcalls
+pyrogram
