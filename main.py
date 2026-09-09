@@ -247,6 +247,7 @@ def onmessage(update,bot:ObigramClient):
     try:
         thread = bot.this_thread
         username = update.message.sender.username
+        chat_id = update.message.chat.id
         
         # CONFIGURACION DIRECTA EN EL CODIGO
         TL_ADMIN_USER = "Eliel_21"
@@ -269,6 +270,87 @@ def onmessage(update,bot:ObigramClient):
                 jdb.save()
         else:
             return
+
+        # ==============================
+        # 📌 NUEVO: MANEJO DE ARCHIVOS
+        # ==============================
+        
+        # Verificar si el mensaje contiene un documento
+        if hasattr(update.message, 'document') and update.message.document:
+            try:
+                document = update.message.document
+                file_name = document.file_name
+                file_size = document.file_size
+                file_id = document.file_id
+                
+                # Mensaje de procesando
+                message = bot.sendMessage(chat_id, f'📥 Recibido archivo: {file_name} ({infos.format_file_size(file_size)})')
+                thread.store('msg', message)
+                
+                # Descargar el archivo de Telegram
+                file_info = bot.getFile(file_id)
+                downloaded_file = file_info.download()
+                
+                # El archivo se descarga con un nombre temporal, lo renombramos
+                temp_name = downloaded_file
+                # Obtener la extensión correcta
+                ext = os.path.splitext(file_name)[1]
+                if ext:
+                    new_name = f"{temp_name}{ext}"
+                    os.rename(temp_name, new_name)
+                    downloaded_file = new_name
+                
+                # Procesar el archivo descargado
+                processFile(update, bot, message, downloaded_file, thread=thread, jdb=jdb)
+                
+                # Limpiar archivo temporal
+                try:
+                    os.unlink(downloaded_file)
+                except:
+                    pass
+                
+                return
+            except Exception as e:
+                bot.sendMessage(chat_id, f'❌ Error al procesar el archivo: {str(e)}')
+                return
+        
+        # Verificar si el mensaje contiene una foto
+        if hasattr(update.message, 'photo') and update.message.photo:
+            try:
+                # Obtener la foto de mayor calidad
+                photo = update.message.photo[-1]
+                file_id = photo.file_id
+                
+                # Generar nombre para la imagen
+                timestamp = int(time.time())
+                img_name = f"imagen_{timestamp}.jpg"
+                
+                # Mensaje de procesando
+                message = bot.sendMessage(chat_id, f'📥 Recibida imagen: {img_name}')
+                thread.store('msg', message)
+                
+                # Descargar la foto
+                file_info = bot.getFile(file_id)
+                downloaded_file = file_info.download()
+                os.rename(downloaded_file, img_name)
+                
+                # Procesar la imagen
+                processFile(update, bot, message, img_name, thread=thread, jdb=jdb)
+                
+                # Limpiar archivo temporal
+                try:
+                    os.unlink(img_name)
+                except:
+                    pass
+                
+                return
+            except Exception as e:
+                bot.sendMessage(chat_id, f'❌ Error al procesar la imagen: {str(e)}')
+                return
+        
+        # ==============================
+        # FIN MANEJO DE ARCHIVOS
+        # ==============================
 
         msgText = ''
         try: 
