@@ -16,3 +16,4 @@ pillow
 beautifulsoup4
 pytgcalls
 pyrogram
+tcping
